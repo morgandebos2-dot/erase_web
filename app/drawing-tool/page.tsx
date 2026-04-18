@@ -16,14 +16,23 @@ export default function DrawPage() {
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadedImage(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.match('image.*')) {
+    alert('Please select an image file');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    setUploadedImage(event.target?.result as string);
   };
+  reader.onerror = () => {
+    alert('Error reading the file');
+  };
+  reader.readAsDataURL(file);
+};
 
   // Color palette
   const colors = [
