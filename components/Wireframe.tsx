@@ -1,17 +1,29 @@
 'use client';
-import { useRef, useState, useEffect, ChangeEvent } from 'react';
+import { useRef, useState, useEffect, ChangeEvent, PointerEvent } from 'react';
 
-export default function Wireframe() {
+type ToolMode = 'erase' | 'draw';
+
+interface WireframeProps {
+  uploadedImage?: string | null;
+  selectedColor?: string;
+  mode?: ToolMode;
+}
+
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+
+export default function Wireframe({
+  uploadedImage: controlledUploadedImage,
+  selectedColor = '#000000',
+  mode = 'draw',
+}: WireframeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [eraserSize, setEraserSize] = useState<number>(20);
-  const eraserSizeRef = useRef<number>(20);
+  const [localUploadedImage, setLocalUploadedImage] = useState<string | null>(null);
+  const [toolSize, setToolSize] = useState<number>(5);
   const isDrawingRef = useRef<boolean>(false);
-
-  // Update eraser size ref whenever the state changes
-  useEffect(() => {
-    eraserSizeRef.current = eraserSize;
-  }, [eraserSize]);
+  const uploadedImage =
+    controlledUploadedImage === undefined ? localUploadedImage : controlledUploadedImage;
+  const isControlledUpload = controlledUploadedImage !== undefined;
 
   // Handle image upload
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
@@ -20,99 +32,128 @@ export default function Wireframe() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setUploadedImage(event.target?.result as string);
+      setLocalUploadedImage(event.target?.result as string);
     };
     reader.readAsDataURL(file);
-  };
-
-  // Draw the uploaded image on the canvas
-  const drawImageOnCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !uploadedImage) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const img = new Image();
-    img.src = uploadedImage;
-    img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    };
   };
 
   // Initialize canvas and draw image when uploadedImage changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.width = 800;
-    canvas.height = 600;
-    drawImageOnCanvas();
-  }, [uploadedImage]);
 
-  // Set up eraser logic only once
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const startErasing = (e: MouseEvent) => {
-      isDrawingRef.current = true;
-      erase(e, ctx);
-    };
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!uploadedImage) return;
 
-    const stopErasing = () => {
-      isDrawingRef.current = false;
-      ctx.beginPath();
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     };
+    img.src = uploadedImage;
+  }, [uploadedImage]);
 
-    const erase = (e: MouseEvent, context: CanvasRenderingContext2D) => {
-      if (!isDrawingRef.current) return;
+  const getContext = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    return canvas.getContext('2d');
+  };
+
+  const getCanvasCoordinates = (event: PointerEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const configureTool = (context: CanvasRenderingContext2D) => {
+    // Set common properties
+    context.lineWidth = toolSize;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+
+    // Set mode-specific properties
+    if (mode === 'erase') {
       context.globalCompositeOperation = 'destination-out';
-      context.lineWidth = eraserSizeRef.current;
-      context.lineCap = 'round';
-      context.lineTo(e.offsetX, e.offsetY);
-      context.stroke();
-      context.beginPath();
-      context.moveTo(e.offsetX, e.offsetY);
-    };
+    } else { // draw mode
+      context.globalCompositeOperation = 'source-over';
+      context.strokeStyle = selectedColor;
+    }
+  };
 
-    canvas.addEventListener('mousedown', startErasing);
-    canvas.addEventListener('mousemove', (e) => erase(e, ctx));
-    canvas.addEventListener('mouseup', stopErasing);
-    canvas.addEventListener('mouseout', stopErasing);
+  const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    const context = getContext();
+    if (!context) return;
 
-    return () => {
-      canvas.removeEventListener('mousedown', startErasing);
-      canvas.removeEventListener('mousemove', (e) => erase(e, ctx));
-      canvas.removeEventListener('mouseup', stopErasing);
-      canvas.removeEventListener('mouseout', stopErasing);
-    };
-  }, []); // Empty dependency array: runs only once
+    const { x, y } = getCanvasCoordinates(event);
+    isDrawingRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    configureTool(context);
+    context.beginPath();
+    context.moveTo(x, y);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+
+    const context = getContext();
+    if (!context) return;
+
+    const { x, y } = getCanvasCoordinates(event);
+    configureTool(context);
+    context.lineTo(x, y);
+    context.stroke();
+  };
+
+  const stopPainting = (event?: PointerEvent<HTMLCanvasElement>) => {
+    isDrawingRef.current = false;
+
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   return (
     <div>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleImageUpload}
-        style={{ marginBottom: '1rem' }}
-      />
+      {!isControlledUpload && (
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          style={{ marginBottom: '1rem' }}
+        />
+      )}
       <div>
         <label>
-          Eraser Size:
+          {mode === 'draw' ? 'Brush Size:' : 'Eraser Size:'}
           <input
             type="range"
-            min="5"
-            max="100"
-            value={eraserSize}
-            onChange={(e) => setEraserSize(Number(e.target.value))}
+            min="1"
+            max="50"
+            value={toolSize}
+            onChange={(e) => setToolSize(Number(e.target.value))}
           />
         </label>
       </div>
       <canvas
         ref={canvasRef}
-        style={{ border: '1px solid #ccc', marginTop: '1rem' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={stopPainting}
+        onPointerLeave={stopPainting}
+        style={{ border: '1px solid #ccc', marginTop: '1rem', touchAction: 'none' }}
       />
     </div>
   );
