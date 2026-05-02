@@ -15,11 +15,11 @@ const CANVAS_HEIGHT = 600;
 export default function Wireframe({
   uploadedImage: controlledUploadedImage,
   selectedColor = '#000000',
-  mode = 'draw',
+  mode = 'erase',
 }: WireframeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [localUploadedImage, setLocalUploadedImage] = useState<string | null>(null);
-  const [toolSize, setToolSize] = useState<number>(5);
+  const [eraserSize, setEraserSize] = useState<number>(20);
   const isDrawingRef = useRef<boolean>(false);
   const uploadedImage =
     controlledUploadedImage === undefined ? localUploadedImage : controlledUploadedImage;
@@ -54,6 +54,7 @@ export default function Wireframe({
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     };
     img.src = uploadedImage;
@@ -62,6 +63,7 @@ export default function Wireframe({
   const getContext = () => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
+
     return canvas.getContext('2d');
   };
 
@@ -77,17 +79,13 @@ export default function Wireframe({
     };
   };
 
-  const configureTool = (context: CanvasRenderingContext2D) => {
-    // Set common properties
-    context.lineWidth = toolSize;
+  const configureBrush = (context: CanvasRenderingContext2D) => {
+    context.globalCompositeOperation = mode === 'erase' ? 'destination-out' : 'source-over';
+    context.lineWidth = eraserSize;
     context.lineCap = 'round';
     context.lineJoin = 'round';
 
-    // Set mode-specific properties
-    if (mode === 'erase') {
-      context.globalCompositeOperation = 'destination-out';
-    } else { // draw mode
-      context.globalCompositeOperation = 'source-over';
+    if (mode === 'draw') {
       context.strokeStyle = selectedColor;
     }
   };
@@ -100,7 +98,11 @@ export default function Wireframe({
     isDrawingRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
 
-    configureTool(context);
+    configureBrush(context);
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x, y);
+    context.stroke();
     context.beginPath();
     context.moveTo(x, y);
   };
@@ -112,18 +114,44 @@ export default function Wireframe({
     if (!context) return;
 
     const { x, y } = getCanvasCoordinates(event);
-    configureTool(context);
+    configureBrush(context);
     context.lineTo(x, y);
     context.stroke();
+    context.beginPath();
+    context.moveTo(x, y);
   };
 
   const stopPainting = (event?: PointerEvent<HTMLCanvasElement>) => {
     isDrawingRef.current = false;
 
+    const context = getContext();
+    context?.beginPath();
+
     if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
+
+  const canvasContainerStyle =
+    mode === 'erase'
+      ? {
+          marginTop: '1rem',
+          display: 'inline-block',
+          border: '1px solid #ccc',
+          backgroundColor: '#ffffff',
+          backgroundImage:
+            'linear-gradient(45deg, #d1d5db 25%, transparent 25%), linear-gradient(-45deg, #d1d5db 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d1d5db 75%), linear-gradient(-45deg, transparent 75%, #d1d5db 75%)',
+          backgroundSize: '20px 20px',
+          backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0',
+          lineHeight: 0,
+        }
+      : {
+          marginTop: '1rem',
+          display: 'inline-block',
+          border: '1px solid #ccc',
+          backgroundColor: '#ffffff',
+          lineHeight: 0,
+        };
 
   return (
     <div>
@@ -140,21 +168,23 @@ export default function Wireframe({
           {mode === 'draw' ? 'Brush Size:' : 'Eraser Size:'}
           <input
             type="range"
-            min="1"
-            max="50"
-            value={toolSize}
-            onChange={(e) => setToolSize(Number(e.target.value))}
+            min="5"
+            max="100"
+            value={eraserSize}
+            onChange={(e) => setEraserSize(Number(e.target.value))}
           />
         </label>
       </div>
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={stopPainting}
-        onPointerLeave={stopPainting}
-        style={{ border: '1px solid #ccc', marginTop: '1rem', touchAction: 'none' }}
-      />
+      <div style={canvasContainerStyle}>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={stopPainting}
+          onPointerLeave={stopPainting}
+          style={{ display: 'block', touchAction: 'none' }}
+        />
+      </div>
     </div>
   );
 }

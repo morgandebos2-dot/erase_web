@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import NavBar from '@/components/NavBar';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Pixel Eraser',
   description: 'Erase parts of your images with a pixel eraser',
 };
+
 
 export default function RootLayout({
   children,
@@ -13,7 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <NavBar />
+        {children}
+      </body>
     </html>
   );
 }

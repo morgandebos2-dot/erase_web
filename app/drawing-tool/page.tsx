@@ -69,7 +69,7 @@ export default function DrawPage() {
         ))}
       </div>
 
-      <Wireframe uploadedImage={uploadedImage} selectedColor={selectedColor} />
+      <Wireframe uploadedImage={uploadedImage} selectedColor={selectedColor} mode="draw" />
       <button
         onClick={handleDownload}
         style={{
