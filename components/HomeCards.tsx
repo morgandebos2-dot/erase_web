@@ -21,9 +21,9 @@ const cards = [
     descClass: styles.boldDesc,
   },
   {
-    title: 'Tool 3',
-    description: 'text',
-    link: '/about',
+    title: 'Text Adder',
+    description: 'Add text to your images with this simple tool.',
+    link: '/text-adder',
     image: '/landscape.svg', // Use a landscape image, e.g. '/landscape.svg'
     bg: styles.cardGreen,
     imgClass: styles.landscapeImg,
